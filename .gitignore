@@ -1,3 +1,9 @@
+# folders which are not needed
+certs/
+ledger-db-certs/
+ledger-db-safe-directory/
+cockroach-data/
+# others
 *.swo
 *.swp
 *.key
