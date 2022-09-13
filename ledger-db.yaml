@@ -20,16 +20,16 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: cockroachdb
+  name: ledgerdb
   labels:
-    app: cockroachdb
+    app: ledgerdb
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: cockroachdb
+  name: ledgerdb
   labels:
-    app: cockroachdb
+    app: ledgerdb
 rules:
 - apiGroups:
   - ""
@@ -41,41 +41,44 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: cockroachdb
+  name: ledgerdb
   labels:
-    app: cockroachdb
+    app: ledgerdb
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: cockroachdb
+  name: ledgerdb
 subjects:
 - kind: ServiceAccount
-  name: cockroachdb
+  name: ledgerdb
   namespace: default
 ---
-# [START gke_boa_kubernetes_manifests_accounts_db_configmap_accounts_db_config]
+# [START gke_boa_kubernetes_manifests_ledger_db_configmap_ledger_db_config]
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: accounts-db-config
+  name: ledger-db-config
   labels:
-    app: cockroachdb
+    app: ledgerdb
 data:
-  POSTGRES_DB: cockroach-db-public
-  PGCLIENTENCODING: 'utf-8'
+    #removed password
+  POSTGRES_DB: defaultdb
   POSTGRES_USER: root
-  ACCOUNTS_DB_URI: "cockroachdb://root@cockroachdb-public:26257/bank_anthos?sslmode=verify-full&sslcert=/cockroach/cockroach-certs/client.root.crt&sslkey=/cockroach/cockroach-certs/client.root.key&sslrootcert=/cockroach/cockroach-certs/ca.crt"
-  
-# [END gke_boa_kubernetes_manifests_accounts_db_configmap_accounts_db_config]
+  POSTGRES_PASSWORD: password
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://ledgerdb-public:26257/defaultdb?sslmode=verify-full&sslcert=/cockroach/cockroach-certs/client.root.crt&sslkey=/cockroach/cockroach-certs/client.root.key&sslrootcert=/cockroach/cockroach-certs/ca.crt"
+  #SPRING_DATASOURCE_URL: jdbc:postgresql://ledgerdb-public:26257/defaultdb?ssl=true&sslmode=verify-full&sslrootcert=cockroach/cockroach-certs/ca.crt&sslkey=/cockroach/cockroach-certs/client.root.key&sslcert=/cockroach/cockroach-certs/client.root.crt
+  SPRING_DATASOURCE_USERNAME: root # should match POSTGRES_USER
+  SPRING_DATASOURCE_PASSWORD: password 
+# [END gke_boa_kubernetes_manifests_ledger_db_configmap_ledger_db_config]
 ---
 apiVersion: v1
 kind: Service
 metadata:
   # This service is meant to be used by clients of the database. It exposes a ClusterIP that will
   # automatically load balance connections to the different database pods.
-  name: cockroachdb-public
+  name: ledgerdb-public
   labels:
-    app: cockroachdb
+    app: ledgerdb
 spec:
   ports:
   # The main port, served by gRPC, serves Postgres-flavor SQL, internode
@@ -86,13 +89,12 @@ spec:
   - port: 5432
     targetPort: 5432
     name: tcp
-    protocol: TCP
-  # The secondary port serves the UI as well as health and debug endpoints.
+    # The secondary port serves the UI as well as health and debug endpoints.
   - port: 8080
     targetPort: 8080
     name: http
   selector:
-    app: cockroachdb
+    app: ledgerdb
 ---
 apiVersion: v1
 kind: Service
@@ -101,9 +103,9 @@ metadata:
   # set such that they can resolve each other's IP addresses. It does not
   # create a load-balanced ClusterIP and should not be used directly by clients
   # in most circumstances.
-  name: cockroachdb
+  name: ledgerdb
   labels:
-    app: cockroachdb
+    app: ledgerdb
   annotations:
     # Use this annotation in addition to the actual publishNotReadyAddresses
     # field below because the annotation will stop being respected soon but the
@@ -132,24 +134,24 @@ spec:
   publishNotReadyAddresses: true
   clusterIP: None
   selector:
-    app: cockroachdb
+    app: ledgerdb
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: cockroachdb
+  name: ledgerdb
 spec:
-  serviceName: "cockroachdb"
+  serviceName: "ledgerdb"
   replicas: 2
   selector:
     matchLabels:
-      app: cockroachdb
+      app: ledgerdb
   template:
     metadata:
       labels:
-        app: cockroachdb
+        app: ledgerdb
     spec:
-      serviceAccountName: cockroachdb
+      serviceAccountName: ledgerdb
       affinity:
               
         podAntiAffinity:
@@ -161,22 +163,22 @@ spec:
                 - key: app
                   operator: In
                   values:
-                  - cockroachdb
+                  - ledgerdb
               topologyKey: kubernetes.io/hostname
       nodeSelector:
         app: cockroach-db
       containers:
-      - name: cockroachdb
-        image: gcr.io/ctr-rizoh/bank-of-anthos/cockroach-db:latest
+      - name: ledgerdb
+        image: gcr.io/ctr-rizoh/bank-of-anthos/ledger-db:latest
         envFrom:
         - configMapRef:
             name: environment-config
         - configMapRef:
-            name: accounts-db-config
+            name: ledger-db-config
         - configMapRef:
             name: demo-data-config
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
-        # the resources that can be allocated on each of your Kubernetes nodes by running:
+        # the resources that can be allocated on each of your Kubernetes nodes by runningledger-:
         #   kubectl describe nodes
         # Note that requests and limits should have identical values.
         resources:
@@ -187,6 +189,8 @@ spec:
             cpu: "1"
             memory: "1Gi" 
         ports:
+          - containerPort: 5432
+            name: postgresql
           - containerPort: 26257
             name: grpc
           - containerPort: 8080
@@ -211,6 +215,7 @@ spec:
         - name: datadir
           mountPath: /cockroach/cockroach-data
         - name: certs
+          #mountPath: /cockroach/cockroach-certs
           mountPath: /cockroach/cockroach-certs
         env:
         - name: COCKROACH_CHANNEL
@@ -237,7 +242,7 @@ spec:
            --certs-dir /cockroach/cockroach-certs
            --advertise-host $(hostname -f)
            --http-addr 0.0.0.0
-           --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb
+           --join ledgerdb-0.ledgerdb,ledgerdb-1.ledgerdb
            --cache $(expr $MEMORY_LIMIT_MIB / 4)MiB
            --max-sql-memory $(expr $MEMORY_LIMIT_MIB / 4)MiB
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
@@ -249,7 +254,7 @@ spec:
           claimName: datadir
       - name: certs
         secret:
-          secretName: cockroachdb.node
+          secretName: ledgerdb.node
           defaultMode: 256
   podManagementPolicy: Parallel
   updateStrategy:
