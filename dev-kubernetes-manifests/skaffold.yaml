@@ -32,9 +32,6 @@ metadata:
 requires:
   - configs: [setup]
 build:
-  googleCloudBuild: {}
-  tagPolicy:
-    sha256: {}
   artifacts:
   - image: accounts-db
     context: src/accounts-db
@@ -55,9 +52,6 @@ metadata:
 requires:
   - configs: [db]
 build:
-  googleCloudBuild: {}
-  tagPolicy:
-    sha256: {}
   artifacts:
   - image: ledgerwriter
     jib:
@@ -88,9 +82,6 @@ kind: Config
 metadata:
   name: frontend # module defining frontend service
 build:
-  googleCloudBuild: {}
-  tagPolicy:
-    sha256: {}
   artifacts:
   - image: frontend
     context: src/frontend
@@ -99,18 +90,18 @@ deploy:
     manifests:
     - dev-kubernetes-manifests/frontend.yaml
 # [END gke_bank_of_anthos_skaffold_config_frontend]
-#---
+---
 # [START gke_bank_of_anthos_skaffold_config_loadgenerator]
-#apiVersion: skaffold/v2beta18
-#kind: Config
-#metadata:
-#  name: loadgenerator # module defining a load generator service
-#build:
-#  artifacts:
-#  - image: loadgenerator
-#    context: src/loadgenerator
-#deploy:
-#  kubectl:
-#    manifests:
-#    - dev-kubernetes-manifests/loadgenerator.yaml
-## [END gke_bank_of_anthos_skaffold_config_loadgenerator]
+apiVersion: skaffold/v2beta18
+kind: Config
+metadata:
+  name: loadgenerator # module defining a load generator service
+build:
+  artifacts:
+  - image: loadgenerator
+    context: src/loadgenerator
+deploy:
+  kubectl:
+    manifests:
+    - dev-kubernetes-manifests/loadgenerator.yaml
+# [END gke_bank_of_anthos_skaffold_config_loadgenerator]

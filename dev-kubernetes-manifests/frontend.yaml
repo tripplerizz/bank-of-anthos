@@ -28,27 +28,15 @@ spec:
     spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 5
-      securityContext:
-        fsGroup: 1000
-        runAsGroup: 1000
-        runAsNonRoot: true
-        runAsUser: 1000
+      nodeSelector:
+        app: bank-of-anthos
       containers:
       - name: front
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - all
-          privileged: false
-          readOnlyRootFilesystem: true
-        image: frontend
+        image: gcr.io/ctr-rizoh/bank-of-anthos/frontend:latest
         volumeMounts:
         - name: publickey
-          mountPath: "/tmp/.ssh"
+          mountPath: "/root/.ssh"
           readOnly: true
-        - mountPath: /tmp
-          name: tmp
         env:
         - name: VERSION
           value: "dev"
@@ -60,7 +48,7 @@ spec:
           value: "http"
          # Valid levels are debug, info, warning, error, critical. If no valid level is set, gunicorn will default to info.
         - name: LOG_LEVEL
-          value: "info"
+          value: "debug"
         # Set to "true" to enable the CymbalBank logo + title
         # - name: CYMBAL_LOGO
         #   value: "false"
@@ -80,18 +68,6 @@ spec:
             configMapKeyRef:
               name: demo-data-config
               key: DEMO_LOGIN_PASSWORD
-        - name: REGISTERED_OAUTH_CLIENT_ID
-          valueFrom:
-            configMapKeyRef:
-              name: oauth-config
-              key: DEMO_OAUTH_CLIENT_ID
-              optional: true
-        - name: ALLOWED_OAUTH_REDIRECT_URI
-          valueFrom:
-            configMapKeyRef:
-              name: oauth-config
-              key: DEMO_OAUTH_REDIRECT_URI
-              optional: true
         # Customize the metadata server hostname to query for metadata
         #- name: METADATA_SERVER
         #  value: "my-metadata-server"
@@ -131,8 +107,6 @@ spec:
           items:
           - key: jwtRS256.key.pub
             path: publickey
-      - emptyDir: {}
-        name: tmp
 # [END gke_dev_kubernetes_manifests_frontend_deployment_frontend]
 ---
 # [START gke_dev_kubernetes_manifests_frontend_service_frontend]

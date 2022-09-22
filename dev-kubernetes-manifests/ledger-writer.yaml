@@ -28,42 +28,31 @@ spec:
     spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 5
-      securityContext:
-        fsGroup: 1000
-        runAsGroup: 1000
-        runAsNonRoot: true
-        runAsUser: 1000
       containers:
       - name: ledgerwriter
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - all
-          privileged: false
-          readOnlyRootFilesystem: true
-        image: ledgerwriter
+        image: gcr.io/ctr-rizoh/bank-of-anthos/ledgerwriter:latest
         volumeMounts:
         - name: publickey
-          mountPath: "/tmp/.ssh"
+          mountPath: "/root/.ssh"
           readOnly: true
-        - mountPath: /tmp
-          name: tmp
+        - name: client-certs
+          mountPath: /cockroach/cockroach-certs
+          readOnly: true
         env:
         - name: VERSION
           value: "dev"
         - name: PORT
           value: "8080"
         - name: ENABLE_TRACING
-          value: "true"
+          value: "false"
         - name: ENABLE_METRICS
-          value: "true"
+          value: "false"
          # tell Java to obey container memory limits
         - name: JVM_OPTS
           value: "-XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -Xms256m -Xmx512m"
         # service level override of log level
         - name: LOG_LEVEL
-          value: "info"
+          value: "debug"
         - name: NAMESPACE
           valueFrom:
             fieldRef:
@@ -103,8 +92,10 @@ spec:
           items:
           - key: jwtRS256.key.pub
             path: publickey
-      - emptyDir: {}
-        name: tmp
+      - name: client-certs
+        secret:
+          secretName: ledgerdb.client.root
+          defaultMode: 256
 # [END gke_dev_kubernetes_manifests_ledger_writer_deployment_ledgerwriter]
 ---
 # [START gke_dev_kubernetes_manifests_ledger_writer_service_ledgerwriter]

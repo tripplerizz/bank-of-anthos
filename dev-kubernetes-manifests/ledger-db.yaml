@@ -1,89 +1,271 @@
-# Copyright 2019 Google LLC
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/bring-your-own-certs/cockroachdb-statefulset.yaml
+# This config file defines a CockroachDB StatefulSet that uses certificaest
+# created outside of Kubernetes. You may want to use it if you want to use a
+# different certificate authority from the one being used by Kubernetes or if
+# your Kubernetes cluster doesn't fully support certificate-signing requests
+# (e.g. as of July 2018, EKS doesn't work properly).
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# To use this config file, first set up your certificates and load them into
+# your Kubernetes cluster as Secrets using the commands below:
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# [START gke_dev_kubernetes_manifests_ledger_db_statefulset_ledger_db]
-kind: StatefulSet
-apiVersion: apps/v1
+# mkdir certs
+# mkdir my-safe-directory
+# cockroach cert create-ca --certs-dir=certs --ca-key=my-safe-directory/ca.key
+# cockroach cert create-client root --certs-dir=certs --ca-key=my-safe-directory/ca.key
+# kubectl create secret generic cockroachdb.client.root --from-file=certs
+# cockroach cert create-node --certs-dir=certs --ca-key=my-safe-directory/ca.key localhost 127.0.0.1 cockroachdb-public cockroachdb-public.default cockroachdb-public.default.svc.cluster.local *.cockroachdb *.cockroachdb.default *.cockroachdb.default.svc.cluster.local
+# kubectl create secret generic cockroachdb.node --from-file=certs
+# kubectl create -f bring-your-own-certs-statefulset.yaml
+# kubectl exec -it cockroachdb-0 -- /cockroach/cockroach init --certs-dir=/cockroach/cockroach-certs
+apiVersion: v1
+kind: ServiceAccount
 metadata:
-  name: ledger-db
-spec:
-  serviceName: "ledger-db"
-  replicas: 1
-  selector:
-    matchLabels:
-      app: ledger-db
-  template:
-    metadata:
-      labels:
-        app: ledger-db
-    spec:
-      serviceAccountName: default
-      containers:
-        - name: postgres
-          image: ledger-db
-          ports:
-            - containerPort: 5432
-          envFrom:
-            - configMapRef:
-                name: environment-config
-            - configMapRef:
-                name: ledger-db-config
-            - configMapRef:
-                name: demo-data-config
-          resources:
-            requests:
-              cpu: 100m
-              memory: 512Mi
-            limits:
-              cpu: 250m
-              memory: 1Gi
-          volumeMounts:
-            - name: postgresdb
-              mountPath: /var/lib/postgresql/data
-              subPath: postgres
-      volumes:
-        - name: postgresdb
-          emptyDir: {}
-# [END gke_dev_kubernetes_manifests_ledger_db_statefulset_ledger_db]
+  name: ledgerdb
+  labels:
+    app: ledgerdb
 ---
-# [START gke_dev_kubernetes_manifests_ledger_db_configmap_ledger_db_config]
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ledgerdb
+  labels:
+    app: ledgerdb
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ledgerdb
+  labels:
+    app: ledgerdb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ledgerdb
+subjects:
+- kind: ServiceAccount
+  name: ledgerdb
+  namespace: default
+---
+# [START gke_boa_kubernetes_manifests_ledger_db_configmap_ledger_db_config]
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: ledger-db-config
   labels:
-    app: postgres
+    app: ledgerdb
 data:
-  POSTGRES_DB: postgresdb
-  POSTGRES_USER: admin
+    #removed password
+  POSTGRES_DB: defaultdb
+  POSTGRES_USER: root
   POSTGRES_PASSWORD: password
-  SPRING_DATASOURCE_URL: jdbc:postgresql://ledger-db:5432/postgresdb
-  SPRING_DATASOURCE_USERNAME: admin # should match POSTGRES_USER
-  SPRING_DATASOURCE_PASSWORD: password # should match POSTGRES_PASSWORD
-# [END gke_dev_kubernetes_manifests_ledger_db_configmap_ledger_db_config]
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://ledgerdb-public:26257/defaultdb?sslmode=verify-full&sslcert=/cockroach/cockroach-certs/client.root.crt&sslkey=/cockroach/cockroach-certs/client.root.key&sslrootcert=/cockroach/cockroach-certs/ca.crt"
+  #SPRING_DATASOURCE_URL: jdbc:postgresql://ledgerdb-public:26257/defaultdb?ssl=true&sslmode=verify-full&sslrootcert=cockroach/cockroach-certs/ca.crt&sslkey=/cockroach/cockroach-certs/client.root.key&sslcert=/cockroach/cockroach-certs/client.root.crt
+  SPRING_DATASOURCE_USERNAME: root # should match POSTGRES_USER
+  SPRING_DATASOURCE_PASSWORD: password 
+# [END gke_boa_kubernetes_manifests_ledger_db_configmap_ledger_db_config]
 ---
-# [START gke_dev_kubernetes_manifests_ledger_db_service_ledger_db]
 apiVersion: v1
 kind: Service
 metadata:
-  name: ledger-db
+  # This service is meant to be used by clients of the database. It exposes a ClusterIP that will
+  # automatically load balance connections to the different database pods.
+  name: ledgerdb-public
+  labels:
+    app: ledgerdb
 spec:
-  type: ClusterIP
-  selector:
-    app: ledger-db
   ports:
-  - name: tcp
-    port: 5432
+  # The main port, served by gRPC, serves Postgres-flavor SQL, internode
+  # traffic and the cli.
+  - port: 26257
+    targetPort: 26257
+    name: grpc
+  - port: 5432
     targetPort: 5432
-# [END gke_dev_kubernetes_manifests_ledger_db_service_ledger_db]
+    name: tcp
+    # The secondary port serves the UI as well as health and debug endpoints.
+  - port: 8080
+    targetPort: 8080
+    name: http
+  selector:
+    app: ledgerdb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # This service only exists to create DNS entries for each pod in the stateful
+  # set such that they can resolve each other's IP addresses. It does not
+  # create a load-balanced ClusterIP and should not be used directly by clients
+  # in most circumstances.
+  name: ledgerdb
+  labels:
+    app: ledgerdb
+  annotations:
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+    # Enable automatic monitoring of all instances when Prometheus is running in the cluster.
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "_status/vars"
+    prometheus.io/port: "8080"
+spec:
+  ports:
+  - port: 5432
+    name: tcp
+    targetPort: 5432
+    protocol: TCP
+  - port: 26257
+    targetPort: 26257
+    name: grpc
+  - port: 8080
+    targetPort: 8080
+    name: http
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other CockroachDB pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  clusterIP: None
+  selector:
+    app: ledgerdb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ledgerdb
+spec:
+  serviceName: "ledgerdb"
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ledgerdb
+  template:
+    metadata:
+      labels:
+        app: ledgerdb
+    spec:
+      serviceAccountName: ledgerdb
+      affinity:
+              
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - ledgerdb
+              topologyKey: kubernetes.io/hostname
+      nodeSelector:
+        app: cockroach-db
+      containers:
+      - name: ledgerdb
+        image: gcr.io/ctr-rizoh/bank-of-anthos/ledger-db:latest
+        envFrom:
+        - configMapRef:
+            name: environment-config
+        - configMapRef:
+            name: ledger-db-config
+        - configMapRef:
+            name: demo-data-config
+        # TODO: Change these to appropriate values for the hardware that you're running. You can see
+        # the resources that can be allocated on each of your Kubernetes nodes by runningledger-:
+        #   kubectl describe nodes
+        # Note that requests and limits should have identical values.
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+          limits:
+            cpu: "1"
+            memory: "1Gi" 
+        ports:
+          - containerPort: 5432
+            name: postgresql
+          - containerPort: 26257
+            name: grpc
+          - containerPort: 8080
+            name: http
+# We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
+#      livenessProbe:
+#        httpGet:
+#          path: "/health"
+#          port: http
+#          scheme: HTTPS
+#        initialDelaySeconds: 30
+#        periodSeconds: 5
+#        readinessProbe:
+#          httpGet:
+#            path: "/health?ready=1"
+#            port: http
+#            scheme: HTTPS
+#          initialDelaySeconds: 10
+#          periodSeconds: 5
+#          failureThreshold: 2
+        volumeMounts:
+        - name: datadir
+          mountPath: /cockroach/cockroach-data
+        - name: certs
+          #mountPath: /cockroach/cockroach-certs
+          mountPath: /cockroach/cockroach-certs
+        env:
+        - name: COCKROACH_CHANNEL
+          value: kubernetes-secure
+        - name: GOMAXPROCS
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.cpu
+              divisor: "1"
+        - name: MEMORY_LIMIT_MIB
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+              divisor: "1Mi"
+          # The use of qualified `hostname -f` is crucial:
+          # Other nodes aren't able to look up the unqualified hostname.
+        command:
+         - "/bin/bash"
+         - "-ecx"
+         - exec
+           /cockroach/cockroach
+           start
+           --logtostderr
+           --certs-dir /cockroach/cockroach-certs
+           --advertise-host $(hostname -f)
+           --http-addr 0.0.0.0
+           --join ledgerdb-0.ledgerdb,ledgerdb-1.ledgerdb
+           --cache $(expr $MEMORY_LIMIT_MIB / 4)MiB
+           --max-sql-memory $(expr $MEMORY_LIMIT_MIB / 4)MiB
+      # No pre-stop hook is required, a SIGTERM plus some time is all that's
+      # needed for graceful shutdown of a node.
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: datadir
+        persistentVolumeClaim:
+          claimName: datadir
+      - name: certs
+        secret:
+          secretName: ledgerdb.node
+          defaultMode: 256
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      accessModes:
+        - "ReadWriteOnce"
+      resources:
+        requests:
+          storage: 100Gi
+

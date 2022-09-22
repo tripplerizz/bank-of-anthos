@@ -28,27 +28,15 @@ spec:
     spec:
       serviceAccountName: default
       terminationGracePeriodSeconds: 5
-      securityContext:
-        fsGroup: 1000
-        runAsGroup: 1000
-        runAsNonRoot: true
-        runAsUser: 1000
       containers:
       - name: balancereader
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - all
-          privileged: false
-          readOnlyRootFilesystem: true
-        image: balancereader
+        image: gcr.io/ctr-rizoh/bank-of-anthos/balancereader:latest
         volumeMounts:
         - name: publickey
-          mountPath: "/tmp/.ssh"
+          mountPath: "/root/.ssh"
           readOnly: true
-        - mountPath: /tmp
-          name: tmp
+        - name: client-certs
+          mountPath: /cockroach/cockroach-certs
         env:
         - name: VERSION
           value: "dev"
@@ -114,8 +102,10 @@ spec:
           items:
           - key: jwtRS256.key.pub
             path: publickey
-      - emptyDir: {}
-        name: tmp
+      - name: client-certs
+        secret:
+          secretName: ledgerdb.client.root
+          defaultMode: 256
 # [END gke_dev_kubernetes_manifests_balance_reader_deployment_balancereader]
 ---
 # [START gke_dev_kubernetes_manifests_balance_reader_service_balancereader]
