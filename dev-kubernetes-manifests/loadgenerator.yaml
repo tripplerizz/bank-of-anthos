@@ -46,7 +46,7 @@ spec:
               - all
           privileged: false
           readOnlyRootFilesystem: true
-        image: loadgenerator
+          image: gcr.io/beezo-project/bank-of-anthos/loadgenerator:latest
         env:
         - name: FRONTEND_ADDR
           value: "frontend:80"

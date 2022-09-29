@@ -167,7 +167,7 @@ spec:
         app: cockroach-db
       containers:
       - name: cockroachdb
-        image: gcr.io/ctr-rizoh/bank-of-anthos/cockroach-db:latest
+        image: gcr.io/beezo-project/bank-of-anthos/accounts-db:latest
         envFrom:
         - configMapRef:
             name: environment-config

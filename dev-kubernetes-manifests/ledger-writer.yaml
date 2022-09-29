@@ -30,7 +30,7 @@ spec:
       terminationGracePeriodSeconds: 5
       containers:
       - name: ledgerwriter
-        image: gcr.io/ctr-rizoh/bank-of-anthos/ledgerwriter:latest
+        image: gcr.io/beezo-project/bank-of-anthos/ledger-writer:latest
         volumeMounts:
         - name: publickey
           mountPath: "/root/.ssh"

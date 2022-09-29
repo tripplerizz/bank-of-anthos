@@ -169,7 +169,7 @@ spec:
         app: cockroach-db
       containers:
       - name: ledgerdb
-        image: gcr.io/ctr-rizoh/bank-of-anthos/ledger-db:latest
+        image: gcr.io/beezo-project/bank-of-anthos/ledger-db:latest
         envFrom:
         - configMapRef:
             name: environment-config

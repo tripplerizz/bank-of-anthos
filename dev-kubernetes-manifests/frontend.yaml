@@ -32,7 +32,7 @@ spec:
         app: bank-of-anthos
       containers:
       - name: front
-        image: gcr.io/ctr-rizoh/bank-of-anthos/frontend:latest
+        image: gcr.io/beezo-project/bank-of-anthos/frontend:latest
         volumeMounts:
         - name: publickey
           mountPath: "/root/.ssh"

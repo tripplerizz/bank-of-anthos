@@ -30,7 +30,7 @@ spec:
       terminationGracePeriodSeconds: 5
       containers:
       - name: transactionhistory
-        image: gcr.io/ctr-rizoh/bank-of-anthos/transactionhistory:latest
+        image: gcr.io/beezo-project/bank-of-anthos/transaction-history:latest
         volumeMounts:
         - name: publickey
           mountPath: "/root/.ssh"
